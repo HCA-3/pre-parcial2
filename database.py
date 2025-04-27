@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from models import Base
 
 class DatabaseConnection:
@@ -11,9 +11,6 @@ class DatabaseConnection:
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         Base.metadata.create_all(bind=self.engine)
 
-    def get_db(self):
-        db = self.SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+    def get_session(self) -> Session:
+        """Devuelve una sesión de base de datos que puede usarse con with"""
+        return self.SessionLocal()

@@ -5,7 +5,8 @@ from models import UsuarioCreate, TareaCreate
 def main():
     db_conn = DatabaseConnection()
     
-    with db_conn.get_db() as db:
+    # Usamos get_session() que devuelve un Session directamente
+    with db_conn.get_session() as db:
         # Crear usuario
         usuario = crear_usuario(db, UsuarioCreate(
             nombre="Ejemplo",
@@ -20,8 +21,8 @@ def main():
             usuario_id=usuario.id
         ))
         
-        print(f"Usuario creado: {usuario.nombre}")
-        print(f"Tarea creada: {tarea.nombre}")
+        print(f"Usuario creado: {usuario.nombre} (ID: {usuario.id})")
+        print(f"Tarea creada: {tarea.nombre} (Estado: {tarea.estado})")
 
 if __name__ == "__main__":
     main()

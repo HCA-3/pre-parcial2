@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 from sqlalchemy import Column, Integer, String, DateTime, Enum, Boolean, ForeignKey
 from sqlalchemy.orm import relationship, declarative_base
 from pydantic import BaseModel
@@ -55,8 +55,9 @@ class UsuarioCreate(UsuarioBase):
 class Usuario(UsuarioBase):
     id: int
     estado: EstadoUsuario
+    
     class Config:
-        orm_mode = True
+        from_attributes = True  # Cambiado de orm_mode a from_attributes
 
 class TareaBase(BaseModel):
     nombre: str
@@ -71,5 +72,6 @@ class Tarea(TareaBase):
     fecha_modificacion: datetime
     estado: EstadoTarea
     usuario_id: int
+    
     class Config:
-        orm_mode = True
+        from_attributes = True  # Cambiado de orm_mode a from_attributes
