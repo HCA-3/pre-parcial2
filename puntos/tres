@@ -1,0 +1,74 @@
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base # Necesario si Base no está definida en este contexto
+
+# Asumiendo que 'Base' de los modelos SQLAlchemy está definida
+# Si no lo está, descomenta la línea anterior o asegúrate de que se importe/defina
+# from your_models_file import Base # O define Base = declarative_base() aquí
+
+class DatabaseConnection:
+    def __init__(self, db_url: str = "sqlite:///./tareas_usuarios.db"):
+        """
+        Inicializa la conexión a la base de datos.
+
+        Args:
+            db_url (str): La URL de conexión a la base de datos SQLAlchemy.
+                          Ejemplos:
+                          - SQLite: "sqlite:///./mi_base_de_datos.db"
+                          - PostgreSQL: "postgresql://usuario:contraseña@host:puerto/nombre_db"
+                          - MySQL: "mysql+mysqlconnector://usuario:contraseña@host:puerto/nombre_db"
+        """
+        # El argumento connect_args es específico para SQLite para permitir su uso en aplicaciones multihilo (como APIs web)
+        # Otros motores de BD no suelen necesitarlo.
+        self.engine = create_engine(
+            db_url,
+            connect_args={"check_same_thread": False} if "sqlite" in db_url else {}
+        )
+        # Crea una fábrica de sesiones configurada
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        print(f"Motor de base de datos SQLAlchemy inicializado para: {db_url}")
+
+        # Opcional: Crear todas las tablas definidas en los modelos que heredan de Base
+        # Es útil para desarrollo, pero en producción se maneja con migraciones (ej. Alembic)
+        # Base.metadata.create_all(bind=self.engine)
+        # print("Se aseguró la existencia de las tablas definidas en los modelos SQLAlchemy.")
+
+    def get_db(self):
+        """
+        Proporciona una sesión de base de datos gestionada.
+
+        Este método es un generador que debe usarse con un 'with' o
+        iterando sobre él (ej. en dependencias de FastAPI).
+        Asegura que la sesión se cierre correctamente.
+        """
+        db = self.SessionLocal()
+        try:
+            yield db # Proporciona la sesión para ser usada
+        finally:
+            db.close() # Cierra la sesión al finalizar el bloque 'with' o la iteración
+
+# --- Ejemplo de uso ---
+# 1. Crear una instancia de la conexión (reemplaza con tu URL real)
+# db_connector = DatabaseConnection("postgresql://user:password@host:port/mydatabase")
+# db_connector_sqlite = DatabaseConnection() # Usará SQLite por defecto
+
+# 2. Obtener una sesión para realizar operaciones
+# session_generator = db_connector_sqlite.get_db()
+# db_session = next(session_generator)
+
+# try:
+#     # ... Aquí irían las operaciones con la base de datos usando db_session ...
+#     # Por ejemplo: nuevo_usuario = UsuarioDB(nombre="Ana", email="ana@example.com")
+#     # db_session.add(nuevo_usuario)
+#     # db_session.commit()
+#     print("Operaciones de BD realizadas (ejemplo).")
+# finally:
+#      try:
+#          # Es crucial cerrar la sesión llamando a next() de nuevo o dejando que el contexto 'with' lo haga
+#          next(session_generator)
+#          print("Sesión de BD cerrada.")
+#      except StopIteration:
+#          # Esto es esperado si se usa next() manualmente
+#          pass
+
+print("--- Clase DatabaseConnection definida ---")

@@ -1,0 +1,77 @@
+from sqlalchemy.orm import Session
+# Asume que TareaDB y TareaCreate están definidos como en el documento
+# from your_models_file import TareaDB, TareaCreate, UsuarioDB # Necesitarías importar los modelos
+
+def adicionar_tarea(db: Session, tarea_in: TareaCreate) -> TareaDB:
+    """
+    Crea una nueva tarea en la base de datos.
+
+    Args:
+        db (Session): La sesión de la base de datos SQLAlchemy.
+        tarea_in (TareaCreate): Los datos de la tarea a crear (modelo Pydantic).
+            Se espera que incluya nombre, descripción (opcional) y usuario_id.
+
+    Returns:
+        TareaDB: El objeto Tarea recién creado y guardado en la base de datos.
+
+    Raises:
+        ValueError: Si el usuario especificado por tarea_in.usuario_id no existe.
+        Exception: Cualquier otra excepción que pueda ocurrir durante la operación de BD.
+    """
+    # Opcional: Verificar si el usuario existe antes de crear la tarea
+    # usuario_db = db.query(UsuarioDB).filter(UsuarioDB.id == tarea_in.usuario_id).first()
+    # if not usuario_db:
+    #     raise ValueError(f"No se encontró un usuario con ID {tarea_in.usuario_id}")
+
+    # Crea una instancia del modelo SQLAlchemy TareaDB
+    # Los campos fecha_creacion, fecha_modificacion y estado tienen valores por defecto
+    db_tarea = TareaDB(
+        nombre=tarea_in.nombre,
+        descripcion=tarea_in.descripcion,
+        usuario_id=tarea_in.usuario_id
+        # El estado por defecto será "Pendiente" según el modelo TareaDB [cite: 12]
+        # Las fechas se manejarán automáticamente por la BD/SQLAlchemy [cite: 6, 12]
+    )
+
+    try:
+        db.add(db_tarea) # Añade el nuevo objeto tarea a la sesión
+        db.commit()      # Guarda los cambios en la base de datos
+        db.refresh(db_tarea) # Refresca el objeto para obtener el ID asignado y otros valores por defecto
+        print(f"Tarea '{db_tarea.nombre}' (ID: {db_tarea.id}) añadida exitosamente para el usuario ID: {db_tarea.usuario_id}.")
+        return db_tarea
+    except Exception as e:
+        db.rollback() # Revierte los cambios en caso de error
+        print(f"Error al añadir la tarea: {e}")
+        raise e # Re-lanza la excepción para manejo externo si es necesario
+
+# --- Ejemplo de cómo se usaría esta función ---
+# (Requiere una instancia de DatabaseConnection y los modelos definidos)
+
+# 1. Configurar la conexión a la BD (como se muestra en el documento)
+# from your_database_connection_file import DatabaseConnection
+# db_connector = DatabaseConnection() # O con la URL específica
+
+# 2. Obtener una sesión de BD
+# db_session_generator = db_connector.get_db()
+# db = next(db_session_generator)
+
+# try:
+    # 3. Crear un objeto Pydantic con los datos de la nueva tarea
+    #    (Asumiendo que existe un usuario con ID=1)
+    # nueva_tarea_data = TareaCreate(nombre="Preparar informe semanal",
+    #                                descripcion="Recopilar datos y generar el informe para la reunión del lunes.",
+    #                                usuario_id=1) # [cite: 14] Asegúrate que este usuario exista
+
+    # 4. Llamar a la función para añadir la tarea
+    # tarea_creada = adicionar_tarea(db=db, tarea_in=nueva_tarea_data)
+
+# except ValueError as ve:
+#    print(f"Error de validación: {ve}")
+# except Exception as ex:
+#    print(f"Ocurrió un error inesperado: {ex}")
+# finally:
+    # 5. Cerrar la sesión
+#    try:
+#        next(db_session_generator) # Cierra la sesión
+#    except StopIteration:
+#        pass # Esperado si se usa next() manualmente

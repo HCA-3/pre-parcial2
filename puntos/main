@@ -1,0 +1,177 @@
+import enum
+from datetime import datetime
+from typing import List, Optional
+
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Enum, Boolean, ForeignKey
+from sqlalchemy.orm import relationship, sessionmaker, declarative_base
+from pydantic import BaseModel, Field
+
+# --- 1. Modelado de Entidades (SQLAlchemy y Pydantic) ---
+
+# --- Estados Personalizados (Enum) ---
+class EstadoTarea(str, enum.Enum):
+    PENDIENTE = "Pendiente"
+    EN_EJECUCION = "En ejecución"
+    REALIZADA = "Realizada"
+    CANCELADA = "Cancelada"
+
+class EstadoUsuario(str, enum.Enum):
+    ACTIVO = "Activo"
+    INACTIVO = "Inactivo"
+    ELIMINADO = "Eliminado"
+
+# --- Modelo SQLAlchemy ---
+Base = declarative_base()
+
+class UsuarioDB(Base):
+    __tablename__ = "usuarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, index=True)
+    email = Column(String, unique=True, index=True)
+    estado = Column(Enum(EstadoUsuario), default=EstadoUsuario.ACTIVO)
+    premium = Column(Boolean, default=False)
+
+    tareas = relationship("TareaDB", back_populates="usuario") # Relación uno a muchos
+
+class TareaDB(Base):
+    __tablename__ = "tareas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, index=True)
+    descripcion = Column(String)
+    fecha_creacion = Column(DateTime, default=datetime.utcnow)
+    fecha_modificacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    estado = Column(Enum(EstadoTarea), default=EstadoTarea.PENDIENTE)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id")) # Clave foránea
+
+    usuario = relationship("UsuarioDB", back_populates="tareas") # Relación muchos a uno
+
+# --- Modelo Pydantic (Adicional si se usa SQLAlchemy) ---
+class UsuarioBase(BaseModel):
+    nombre: str
+    email: str
+    premium: bool = False
+
+class UsuarioCreate(UsuarioBase):
+    pass # No necesita campos adicionales para creación básica
+
+class Usuario(UsuarioBase):
+    id: int
+    estado: EstadoUsuario
+
+    class Config:
+        orm_mode = True # Permite compatibilidad con ORM
+
+class TareaBase(BaseModel):
+    nombre: str
+    descripcion: Optional[str] = None
+
+class TareaCreate(TareaBase):
+    usuario_id: int # Necesario al crear una tarea
+
+class Tarea(TareaBase):
+    id: int
+    fecha_creacion: datetime
+    fecha_modificacion: datetime
+    estado: EstadoTarea
+    usuario_id: int
+
+    class Config:
+        orm_mode = True # Permite compatibilidad con ORM
+
+
+# --- 2. Estados Personalizados (Ya definidos arriba con Enum) ---
+# Los Enums EstadoTarea y EstadoUsuario ya definen los estados personalizados requeridos[cite: 8, 9].
+
+
+# --- 3. Clase de Conexión con la Base de Datos ---
+class DatabaseConnection:
+    def __init__(self, db_url: str = "sqlite:///./tareas_usuarios.db"): # URL de ejemplo para SQLite
+        """
+        Inicializa la conexión a la base de datos.
+        Args:
+            db_url (str): La URL de conexión a la base de datos (ej., PostgreSQL, MySQL, SQLite).
+                          Formato SQLAlchemy: dialect+driver://username:password@host:port/database
+        """
+        self.engine = create_engine(db_url, connect_args={"check_same_thread": False} if "sqlite" in db_url else {}) # check_same_thread es para SQLite
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        # Crear tablas si no existen (solo para desarrollo/pruebas iniciales)
+        Base.metadata.create_all(bind=self.engine)
+        print(f"Conexión establecida con: {db_url}")
+        print("Tablas 'usuarios' y 'tareas' aseguradas.")
+
+    def get_db(self):
+        """Generador para obtener una sesión de base de datos."""
+        db = self.SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+# Ejemplo de cómo usar la clase de conexión:
+# db_connection = DatabaseConnection("postgresql://user:password@host:port/mydatabase") # Reemplazar con tu URL real
+# session_generator = db_connection.get_db()
+# db_session = next(session_generator)
+# ... usar db_session ...
+# next(session_generator) # Cierra la sesión (implícito en el 'finally')
+
+
+# --- 4. Operaciones para Adicionar Tareas ---
+def adicionar_tarea(db_session, tarea: TareaCreate) -> TareaDB:
+    """
+    Añade una nueva tarea a la base de datos.
+    Args:
+        db_session: La sesión activa de SQLAlchemy.
+        tarea (TareaCreate): Objeto Pydantic con los datos de la nueva tarea.
+    Returns:
+        TareaDB: El objeto Tarea recién creado y guardado en la BD.
+    """
+    # Verificar si el usuario existe (opcional pero recomendado)
+    usuario = db_session.query(UsuarioDB).filter(UsuarioDB.id == tarea.usuario_id).first()
+    if not usuario:
+        raise ValueError(f"Usuario con ID {tarea.usuario_id} no encontrado.")
+
+    nueva_tarea_db = TareaDB(
+        nombre=tarea.nombre,
+        descripcion=tarea.descripcion,
+        usuario_id=tarea.usuario_id
+        # fecha_creacion y estado se establecen por defecto en el modelo SQLAlchemy
+    )
+    db_session.add(nueva_tarea_db)
+    db_session.commit()
+    db_session.refresh(nueva_tarea_db) # Refresca el objeto para obtener el ID asignado y valores por defecto
+    print(f"Tarea '{nueva_tarea_db.nombre}' (ID: {nueva_tarea_db.id}) añadida para el usuario ID: {nueva_tarea_db.usuario_id}.")
+    return nueva_tarea_db
+
+# Ejemplo de cómo usar la función adicionar_tarea:
+# db_connection = DatabaseConnection() # Usará SQLite por defecto
+# session_generator = db_connection.get_db()
+# db = next(session_generator)
+#
+# # Primero necesitarías crear un usuario o asegurarte de que existe uno con ID 1
+# # usuario_ejemplo = UsuarioDB(id=1, nombre="Test User", email="test@example.com")
+# # db.add(usuario_ejemplo)
+# # db.commit()
+#
+# tarea_data = TareaCreate(nombre="Preparar informe", descripcion="Informe trimestral de ventas", usuario_id=1)
+# try:
+#     tarea_creada = adicionar_tarea(db, tarea_data)
+#     print(f"Tarea creada exitosamente: ID={tarea_creada.id}")
+# except ValueError as e:
+#     print(f"Error al crear tarea: {e}")
+# except Exception as e:
+#     print(f"Ocurrió un error inesperado: {e}")
+#     db.rollback() # Deshacer cambios en caso de error
+# finally:
+#      try:
+#          next(session_generator) # Cierra la sesión
+#      except StopIteration:
+#          pass # El generador ya se consumió
+
+print("\n--- Análisis del Documento Completado (Código Python) ---")
+print("Se ha generado el código para:")
+print("1. Modelar las entidades 'Usuario' y 'Tarea' usando SQLAlchemy y Pydantic[cite: 5, 7, 10].")
+print("2. Definir los estados personalizados para tareas y usuarios usando Enum[cite: 8, 9].")
+print("3. Crear una clase para gestionar la conexión a la base de datos[cite: 11].")
+print("4. Implementar la función para añadir nuevas tareas[cite: 12].")

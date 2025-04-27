@@ -1,0 +1,90 @@
+import enum
+from datetime import datetime
+from typing import List, Optional
+
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Enum, Boolean, ForeignKey
+from sqlalchemy.orm import relationship, sessionmaker, declarative_base
+from pydantic import BaseModel, Field
+
+# --- Estados Personalizados (Necesarios para los modelos) ---
+class EstadoTarea(str, enum.Enum):
+    PENDIENTE = "Pendiente"
+    EN_EJECUCION = "En ejecución"
+    REALIZADA = "Realizada"
+    CANCELADA = "Cancelada"
+
+class EstadoUsuario(str, enum.Enum):
+    ACTIVO = "Activo"
+    INACTIVO = "Inactivo"
+    ELIMINADO = "Eliminado"
+
+# --- Modelo SQLAlchemy ---
+Base = declarative_base()
+
+class UsuarioDB(Base):
+    __tablename__ = "usuarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, index=True) # [cite: 7]
+    email = Column(String, unique=True, index=True) # [cite: 7]
+    estado = Column(Enum(EstadoUsuario), default=EstadoUsuario.ACTIVO) # [cite: 7, 9]
+    premium = Column(Boolean, default=False) # [cite: 7]
+
+    # Relación: Un usuario puede tener muchas tareas
+    tareas = relationship("TareaDB", back_populates="usuario")
+
+class TareaDB(Base):
+    __tablename__ = "tareas"
+
+    id = Column(Integer, primary_key=True, index=True) # [cite: 6]
+    nombre = Column(String, index=True) # [cite: 6]
+    descripcion = Column(String) # [cite: 6]
+    fecha_creacion = Column(DateTime, default=datetime.utcnow) # [cite: 6]
+    fecha_modificacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) # [cite: 6]
+    estado = Column(Enum(EstadoTarea), default=EstadoTarea.PENDIENTE) # [cite: 6, 8]
+    usuario_id = Column(Integer, ForeignKey("usuarios.id")) # [cite: 6] - Relación con Usuario
+
+    # Relación: Una tarea pertenece a un usuario
+    usuario = relationship("UsuarioDB", back_populates="tareas")
+
+# --- Modelo Pydantic ---
+# Modelo base para Usuario (campos comunes para creación y lectura)
+class UsuarioBase(BaseModel):
+    nombre: str # [cite: 7]
+    email: str # [cite: 7]
+    premium: bool = False # [cite: 7]
+
+# Modelo para crear un nuevo Usuario (hereda de UsuarioBase)
+class UsuarioCreate(UsuarioBase):
+    pass # No requiere campos adicionales para la creación básica
+
+# Modelo para leer/devolver un Usuario (incluye campos de la BD como id y estado)
+class Usuario(UsuarioBase):
+    id: int # [cite: 7]
+    estado: EstadoUsuario # [cite: 7]
+
+    class Config:
+        orm_mode = True # Habilita la compatibilidad con modelos ORM (SQLAlchemy)
+
+# Modelo base para Tarea
+class TareaBase(BaseModel):
+    nombre: str # [cite: 6]
+    descripcion: Optional[str] = None # [cite: 6]
+
+# Modelo para crear una nueva Tarea
+class TareaCreate(TareaBase):
+    usuario_id: int # Es necesario saber a qué usuario pertenece al crearla [cite: 6]
+
+# Modelo para leer/devolver una Tarea
+class Tarea(TareaBase):
+    id: int # [cite: 6]
+    fecha_creacion: datetime # [cite: 6]
+    fecha_modificacion: datetime # [cite: 6]
+    estado: EstadoTarea # [cite: 6]
+    usuario_id: int # [cite: 6]
+
+    class Config:
+        orm_mode = True # Habilita la compatibilidad con modelos ORM
+
+print("--- Modelos SQLAlchemy y Pydantic para Usuario y Tarea ---")
+# Este código define las clases, no produce salida visible a menos que se instancien o usen.
